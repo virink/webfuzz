@@ -1,3 +1,4 @@
 webfuzz
-dicts/dic.db
+build
+dicts/*.db
 *.log

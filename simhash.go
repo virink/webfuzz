@@ -84,11 +84,11 @@ func calcWithWeight(bitHash string, weight float64) []float64 {
 func sliceInnerPlus(arr1, arr2 []float64) (dstArr []float64, err error) {
 	dstArr = make([]float64, len(arr1), len(arr1))
 	if arr1 == nil || arr2 == nil {
-		err = fmt.Errorf("sliceInnerPlus array nil")
+		Error.Println("sliceInnerPlus array nil")
 		return
 	}
 	if len(arr1) != len(arr2) {
-		err = fmt.Errorf("sliceInnerPlus array Length NOT match, %v != %v", len(arr1), len(arr2))
+		Error.Printf("sliceInnerPlus array Length NOT match, %v != %v\n", len(arr1), len(arr2))
 		return
 	}
 	for i, v1 := range arr1 {
@@ -126,12 +126,12 @@ func simHashSimilar(srcWordWeighs, dstWordWeights []WordWeight) (distance int, e
 	if err != nil {
 		return
 	}
-	fmt.Println("srcFingerPrint: ", srcFingerPrint)
+	Debug.Println("srcFingerPrint: ", srcFingerPrint)
 	dstFingerPrint, err := simhashFingerPrint(dstWordWeights)
 	if err != nil {
 		return
 	}
-	fmt.Println("dstFingerPrint: ", dstFingerPrint)
+	Debug.Println("dstFingerPrint: ", dstFingerPrint)
 	distance = hammingDistance(srcFingerPrint, dstFingerPrint)
 	return
 }
@@ -141,26 +141,28 @@ func GetSimHashSimilar(srcStr string, dstStr string) int {
 	g := newGoJieba()
 	srcWordsWeight := g.C.ExtractWithWeight(srcStr, 30)
 	dstWordsWeight := g.C.ExtractWithWeight(dstStr, 30)
-	// Debug.Printf("SrcWordsWeight : %v\n", srcWordsWeight)
-	// Debug.Printf("DstWordsWeight : %v\n", dstWordsWeight)
+	Debug.Printf("SrcWordsWeight : %v\n", srcWordsWeight)
+	Debug.Printf("DstWordsWeight : %v\n", dstWordsWeight)
 	srcWords := make([]WordWeight, len(srcWordsWeight))
 	dstWords := make([]WordWeight, len(dstWordsWeight))
+	Debug.Println("1")
 	for i, ww := range srcWordsWeight {
 		word := WordWeight{Word: ww.Word, Weight: ww.Weight}
 		srcWords[i] = word
 	}
+	Debug.Println("2")
 	for i, ww := range dstWordsWeight {
 		word := WordWeight{Word: ww.Word, Weight: ww.Weight}
 		dstWords[i] = word
 	}
-	// Debug.Printf("SrcWords : %v\n", srcWords)
-	// Debug.Printf("DstWords : %v\n", dstWords)
+	Debug.Printf("SrcWords : %v\n", srcWords)
+	Debug.Printf("DstWords : %v\n", dstWords)
 	distance, err := simHashSimilar(srcWords, dstWords)
 	if err != nil {
 		Error.Printf("[E] SimHashSimilar Failed: %v\n", err.Error())
 		return 0
 	}
-	// Debug.Printf("SimHashSimilar distance: %v\n", distance)
+	Debug.Printf("SimHashSimilar distance: %v\n", distance)
 	g.close()
 	return distance
 }

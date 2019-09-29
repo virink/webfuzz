@@ -15,7 +15,7 @@ const (
 	// APPNAME Name for app
 	APPNAME = "WebFuzz"
 	// VERSION Version for app
-	VERSION = "0.0.1"
+	VERSION = "0.0.2"
 
 	HEAD int = 1
 	GET  int = 2
@@ -27,8 +27,9 @@ const (
 )
 
 var (
-	resSc, resLen int
-	resBody       string
+	HMethod, HAction map[int]string
+	resSc, resLen    int
+	resBody          string
 
 	Debug *log.Logger
 	Info  *log.Logger
@@ -39,6 +40,15 @@ var (
 )
 
 func init() {
+	HMethod = make(map[int]string, 3)
+	HAction = make(map[int]string, 3)
+	HMethod[HEAD] = "HEAD"
+	HMethod[GET] = "GET"
+	HMethod[POST] = "POST"
+	HAction[NORMAL] = "NORMAL"
+	HAction[LENGTH] = "LENGTH"
+	HAction[RANGE] = "RANGE"
+
 	debugFile, err := os.OpenFile("webfuzz_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		Error.Fatalln("打开日志文件失败：", err)
@@ -110,10 +120,10 @@ func main() {
 				if strings.HasSuffix(BaseURL, "/") {
 					BaseURL = BaseURL[:len(BaseURL)-1]
 				}
-				Info.Println("|| Target   : ", BaseURL)
-				Info.Println("|| Thread   : ", thread)
-				Info.Println("|| Interval : ", interval)
-				Info.Println("|| Dict     : ", dbFile)
+				Info.Println("|#| Target   : ", BaseURL)
+				Info.Println("|#| Thread   : ", thread)
+				Info.Println("|#| Interval : ", interval)
+				Info.Println("|#| Dict     : ", dbFile)
 				// Prepare for brute
 				if PrepareForBrute(method, action) {
 					Dispatcher(thread, interval, webType, dbFile)

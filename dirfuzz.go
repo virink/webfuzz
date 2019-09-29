@@ -52,6 +52,8 @@ var (
 	HTTPAction int
 	// SimilarBody 相似性-404 頁面內容
 	SimilarBody string
+	// NotFoundLength 404 内容长度
+	NotFoundLength int
 
 	reqUrls    chan ReqUrls
 	dictUrls   chan ReqUrls
@@ -112,129 +114,128 @@ func HTTPRequest(url string, method int, action int) (status int, length int, bo
 			req.Header.Set("Range", fmt.Sprintf("bytes=-%d", _r))
 		}
 		resp, err := HTTPClient.Do(req)
-		if err != nil {
-			Error.Println("HTTPRequest Error:", err.Error())
-			return 0, 0, ""
-		}
-		if resp.StatusCode == 302 {
-			body = resp.Header.Get("Location")
-			// fmt.Println(resp.Header)
-			return resp.StatusCode, 0, body
-		}
-		defer resp.Body.Close()
-		if method > HEAD && action >= NORMAL {
-			_body, err := ioutil.ReadAll(resp.Body)
-			if err != nil {
-				Error.Println("ioutil ReadAll failed :", err.Error())
-				return resp.StatusCode, length, ""
+		if err == nil {
+			if resp.StatusCode == 302 {
+				body = resp.Header.Get("Location")
+				// TODO: Auto Redirect
+				return resp.StatusCode, 0, body
 			}
-			body = string(_body)
-			// fmt.Println(body)
-			// return resp.Status, len(body), string(body)
-		}
-		// Header
-		if action == RANGE {
-			ret := resp.Header.Get("Content-Range")
-			if ret != "" {
-				_tmp := strings.Split(ret, "/")
-				// fmt.Println("length", _tmp)
-				if len(_tmp) > 1 {
-					length, _ = strconv.Atoi(_tmp[1])
+
+			// Header Content-Length
+			if action == LENGTH {
+				length, _ = strconv.Atoi(resp.Header.Get("Content-Length"))
+				// Debug.Println("length", length, "not", NotFoundLength, "header", resp.Header.Get("Content-Length"), url)
+				// Debug.Println(resp.Header)
+				if length == NotFoundLength {
+					return 404, length, ""
+				}
+				if length > 0 {
+					return resp.StatusCode, length, ""
 				}
 			}
+
+			// 判断状态 - RANGE 只是省流量
+			if action == RANGE && resp.Header.Get("Content-Range") != "" {
+				// _tmp := strings.Split(resp.Header.Get("Content-Range"), "/")
+				// if len(_tmp) > 1 {
+				// 	length, _ = strconv.Atoi(_tmp[1])
+				// }
+				return resp.StatusCode, 233, ""
+			}
+
+			// Read Body Data
+			if method > HEAD && action >= NORMAL {
+				defer resp.Body.Close()
+				_body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					Error.Println("ioutil ReadAll failed :", err.Error())
+					return 400, 0, ""
+				}
+				body = string(_body)
+				if len(body) == NotFoundLength {
+					return 404, len(body), body
+				}
+				if len(SimilarBody) > 0 && GetSimHashSimilar(SimilarBody, body) > SimilarDistance {
+					return 404, 0, ""
+				}
+			}
+
+			// Default
+			return resp.StatusCode, len(body), body
 		}
-		// Content-Length
-		if length == 0 {
-			length, _ = strconv.Atoi(resp.Header.Get("Content-Length"))
-		}
-		// Calc body
-		if length == 0 {
-			length = len(body)
-		}
-		return resp.StatusCode, length, body
 	}
-	Error.Println("NewRequest Error:" + err.Error())
 	return 400, 0, ""
 }
 
 // PrepareForBrute 预处理
 func PrepareForBrute(method int, action int) bool {
 	// 测试爆破方法
+	// TODO: Range Action
 	/*
 		Bursting Performances in Blind SQL Injection - Take 2 (Bandwidth)
 		http://www.wisec.it/sectou.php?id=472f952d79293
-
-		mHeadLength := false
-		mGetRange := false
-		// test for head range
-		resSc, resLen, resBody = HTTPRequest(BaseURL, HEAD, LENGTH)
-		if resSc == 200 && resLen > 0 {
-			log.Println("[S] Good Job For HEAD & LENGTH")
-			mHeadLength = true
-		} else if resSc == 400 {
-			log.Println("[I] Server not suppost HEAD data for 'Content-Length'")
-		}
-		fmt.Println("[D] HEAD LENGTH", resSc, resLen, resBody)
-		// test for get range
-		resSc, resLen, resBody = HTTPRequest(BaseURL, GET, RANGE)
-		if resSc == 206 && resLen > 0 {
-			log.Println("[S] Good Job For GET & RANGE")
-			mGetRange = true
-		} else {
-			log.Println("[I] Server not suppost GET 'Range'")
-		}
-		fmt.Println("[D] GET RANGE", resSc, resLen, resBody)
-
-		fmt.Println(mHeadLength, mGetRange)
 	*/
 	// test for head normal
 	r := make(map[int]Resp, 5)
 	// 正常页面
-	Debug.Println("Try to req HEAD & NORMAL 0 : ", BaseURL)
+	// Debug.Println("Try to req HEAD & NORMAL 0 : ", BaseURL)
+	// fmt.Printf("\r[*] %100s", "Try to req HEAD & NORMAL")
+	redirectBaseURL := BaseURL
 	rS, rL, rB := HTTPRequest(BaseURL, HEAD, NORMAL)
+	if rS == 302 {
+		redirectBaseURL := rB
+		if !strings.HasPrefix(redirectBaseURL, "http://") || !strings.HasPrefix(redirectBaseURL, "https://") {
+			if strings.HasPrefix(redirectBaseURL, "/") {
+				redirectBaseURL = BaseURL + redirectBaseURL
+			} else {
+				redirectBaseURL = BaseURL + "/" + redirectBaseURL
+			}
+		}
+		Info.Println("[+] BaseURL Redirect : ", redirectBaseURL)
+		rS, rL, rB = HTTPRequest(redirectBaseURL, HEAD, NORMAL)
+	}
 	r[0] = Resp{rS, rL, rB}
 	if rS == 200 {
-		// 404
 		url := fmt.Sprintf("%s/%s", BaseURL, RandString(10))
-		Debug.Println("Try to req HEAD & NORMAL 1 : ", url)
 		rS, rL, rB = HTTPRequest(url, HEAD, NORMAL)
 		r[1] = Resp{rS, rL, rB}
 		url = fmt.Sprintf("%s/%s/%s", BaseURL, RandString(10), RandString(10))
-		Debug.Println("Try to req HEAD & NORMAL 2 : ", url)
 		rS, rL, rB = HTTPRequest(url, HEAD, NORMAL)
 		r[2] = Resp{rS, rL, rB}
 		url = fmt.Sprintf("%s/%s/%s.html", BaseURL, RandString(10), RandString(5))
-		Debug.Println("Try to req HEAD & NORMAL 3 : ", url)
 		rS, rL, rB = HTTPRequest(url, HEAD, NORMAL)
 		r[3] = Resp{rS, rL, rB}
 		if (r[1].Status == r[2].Status) && (r[2].Status == r[3].Status) && (r[3].Status == 404) {
-			Debug.Println("Good Job For HEAD & NORMAL")
 			HTTPMethod = HEAD
 			HTTPAction = NORMAL
+			Info.Println("[+] Use NotFound Status")
 		} else {
-			Debug.Println("Try to req GET & NORMAL 0 : ", BaseURL)
-			rS, rL, rB = HTTPRequest(BaseURL, GET, NORMAL)
+			rS, rL, rB = HTTPRequest(redirectBaseURL, GET, NORMAL)
 			r[0] = Resp{rS, rL, rB}
 			url = fmt.Sprintf("%s/%s", BaseURL, RandString(10))
-			Debug.Println("Try to req GET & NORMAL 1 : ", url)
 			rS, rL, rB = HTTPRequest(url, GET, NORMAL)
 			r[1] = Resp{rS, rL, rB}
 			url = fmt.Sprintf("%s/%s/%s", BaseURL, RandString(10), RandString(10))
-			Debug.Println("Try to req GET & NORMAL 2 : ", url)
 			rS, rL, rB = HTTPRequest(url, GET, NORMAL)
 			r[2] = Resp{rS, rL, rB}
 			url = fmt.Sprintf("%s/%s/%s.html", BaseURL, RandString(10), RandString(5))
-			Debug.Println("Try to req GET & NORMAL 3 : ", url)
 			rS, rL, rB = HTTPRequest(url, GET, NORMAL)
 			r[3] = Resp{rS, rL, rB}
-			if (r[2].Status == r[3].Status) && (r[3].Status == r[4].Status) && (r[4].Status == 404) {
-				Debug.Println("Good Job For GET & NORMAL")
+			if (r[2].Status == r[3].Status) && (r[3].Status == r[1].Status) && (r[1].Status == 404) {
+				// Normal NotFound Status
 				HTTPMethod = GET
 				HTTPAction = NORMAL
-			} else if (r[2].Status == r[3].Status) && (r[3].Status == r[4].Status) && (r[4].Status == 200) {
-				// 狀態碼為 200 的 Not Found
-				// 相似性判斷
-				if (r[1].Length != r[2].Length) && (r[2].Length != r[3].Length) {
+				Info.Println("[+] Use NotFound Status")
+			} else {
+				if (r[2].Status == r[3].Status) && (r[3].Status == r[1].Status) && (r[1].Status == 200) && (r[1].Length == r[2].Length) && (r[2].Length == r[3].Length) {
+					// OK Status + 固定长度 NotFound Page
+					HTTPMethod = GET
+					HTTPAction = LENGTH
+					NotFoundLength = r[1].Length
+					Info.Println("[+] Use NotFound Length")
+				} else {
+					// FIXME: goroutine & gojieba ??? 没找到错误原因呢
+					// 相似性判斷
 					distance := [3]int{0, 0, 0}
 					if math.Abs(float64(r[1].Length-r[2].Length)) < 100 {
 						distance[0] = GetSimHashSimilar(r[1].Body, r[2].Body)
@@ -252,11 +253,17 @@ func PrepareForBrute(method int, action int) bool {
 							return false
 						}
 					}
+					Info.Println("[+] Use SimHash Similar")
+					SimilarBody = r[1].Body
 				}
-
+				// } else {
+				// 	Debug.Println("？？？？")
+				// 	Debug.Println("Status :", r[1].Status, r[2].Status, r[3].Status)
+				// 	Debug.Println("Length :", r[1].Length, r[2].Length, r[3].Length)
 			}
 		}
 	}
+	Info.Println("Brute : Method = ", HMethod[HTTPMethod], "Action : ", HAction[HTTPAction])
 	return true
 }
 
@@ -284,26 +291,22 @@ func StartToBrute(wg *sync.WaitGroup, webType string, threadCount int, interval 
 						_uri += "/"
 					}
 					url := strings.Join([]string{BaseURL, _uri}, "/")
-					// Debug.Println(uri, url)
 					rS, _, _ := HTTPRequest(url, HTTPMethod, HTTPAction)
-					// fmt.Printf("[*] %d - %-100s\n", rS, url)
-					fmt.Printf("\r[*] %d - %-100s\r", rS, url)
+					fmt.Printf("\r\x1b[1;36m[*] %d - %-100s\x1b[0m\r", rS, url)
 					if rS == 200 {
 						ResultUrls.Ok = append(ResultUrls.Ok, url)
 						if uri.t == 2 {
 							_p := ReqUrls{2, _uri}
 							dictUrls <- _p
 						}
-						// fmt.Printf("[*] %d - %-100s\n", rS, url)
-						fmt.Printf("\r[*] %d - %-100s\n", rS, url)
+						fmt.Printf("\r\x1b[1;32m[*] %d - %-100s\x1b[0m\n", rS, url)
 					} else if rS == 403 {
 						if uri.t == 2 && webType == "jsp" {
 							_p := ReqUrls{2, _uri}
 							dictUrls <- _p
 						}
 						ResultUrls.Forbidden = append(ResultUrls.Forbidden, url)
-						// fmt.Printf("[*] %d - %-100s\n", rS, url)
-						fmt.Printf("\r[*] %d - %-100s\n", rS, url)
+						fmt.Printf("\r\x1b[1;31m[*] %d - %-100s\x1b[0m\n", rS, url)
 					}
 					// 间隔时间
 					if interval > 0 {
@@ -327,12 +330,12 @@ func GetDictUrls(wg *sync.WaitGroup) {
 		case uri := <-dictUrls:
 			_uri := StringStrip(uri.p, "/")
 			paths := strings.Split(_uri, "/")
-			Debug.Println("GetDictUrls Uri.p : ", _uri)
-			Debug.Println("GetDictUrls paths : ", paths)
+			// Debug.Println("GetDictUrls Uri.p : ", _uri)
+			// Debug.Println("GetDictUrls paths : ", paths)
 			t := Nodes
 			// TODO ...
 			for i, p := range paths {
-				Debug.Println("GetDictUrls range paths p : ", p)
+				// Debug.Println("GetDictUrls range paths p : ", p)
 				if _, ok := t.Nodes[p]; ok {
 					t = t.getNode(p)
 				}
@@ -413,6 +416,6 @@ func Dispatcher(threadCount, interval int, webType, dbFile string) {
 	// ResultUrls
 	sort.Strings(ResultUrls.Ok)
 	sort.Strings(ResultUrls.Forbidden)
-	Info.Printf("[+] Result :\t[200] : %d\t[403] : %d\n", len(ResultUrls.Ok), len(ResultUrls.Forbidden))
+	Info.Printf("[+] Result : { 200 : %d, 403 : %d }          \n", len(ResultUrls.Ok), len(ResultUrls.Forbidden))
 	saveResult("result.log")
 }
