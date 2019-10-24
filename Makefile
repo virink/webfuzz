@@ -8,11 +8,11 @@ APPNAME=webfuzz
 current:
 	@mkdir -p ${TARGET}/
 	@rm -f ./${TARGET}/${APPNAME}
-	@go build -o ./${TARGET}/${APPNAME}; \
+	@go build -o ${TARGET}/${APPNAME}; \
 	echo "Done."
 
-debug: current
-	${TARGET}/${APPNAME}
+# debug: current
+# 	${TARGET}/${APPNAME}
 
 fmt:
 	@go fmt ./...; \
@@ -58,6 +58,10 @@ lint:
 	golangci-lint run ./... ; \
 	go mod tidy ; \
 	echo Done
+
+install: current
+	cp -f ${TARGET}/${APPNAME} /usr/local/bin/${APPNAME}
+
 
 clean:
 	@rm -rf ${TARGET}/* ; \

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	rua "github.com/EDDYCJY/fake-useragent"
+
+	similarity "github.com/virink/htmlsimilarity"
 )
 
 const (
@@ -155,7 +157,8 @@ func HTTPRequest(url string, method int, action int) (status int, length int, bo
 				if len(body) == NotFoundLength {
 					return 404, len(body), body
 				}
-				if len(SimilarBody) > 0 && GetSimHashSimilar(SimilarBody, body) > SimilarDistance {
+				isSimilar, _ := similarity.GetSimilar(SimilarBody, body)
+				if len(SimilarBody) > 0 && isSimilar {
 					return 404, 0, ""
 				}
 			}
@@ -234,32 +237,25 @@ func PrepareForBrute(method int, action int) bool {
 					NotFoundLength = r[1].Length
 					Info.Println("[+] Use NotFound Length")
 				} else {
-					// FIXME: goroutine & gojieba ??? 没找到错误原因呢
 					// 相似性判斷
-					distance := [3]int{0, 0, 0}
+					isSimilar := [3]bool{false, false, false}
 					if math.Abs(float64(r[1].Length-r[2].Length)) < 100 {
-						distance[0] = GetSimHashSimilar(r[1].Body, r[2].Body)
+						isSimilar[0], _ = similarity.GetSimilar(r[1].Body, r[2].Body)
 					}
 					if math.Abs(float64(r[3].Length-r[2].Length)) < 100 {
-						distance[1] = GetSimHashSimilar(r[3].Body, r[2].Body)
+						isSimilar[1], _ = similarity.GetSimilar(r[3].Body, r[2].Body)
 					}
 					if math.Abs(float64(r[3].Length-r[1].Length)) < 100 {
-						distance[2] = GetSimHashSimilar(r[3].Body, r[1].Body)
+						isSimilar[2], _ = similarity.GetSimilar(r[3].Body, r[1].Body)
 					}
-					for _, v := range distance {
-						if v > SimilarDistance {
-							Debug.Println("[W] There are some warining!")
-							Debug.Println("1x2", distance[0], "3x2", distance[1], "3x1", distance[2])
+					for _, v := range isSimilar {
+						if !v {
 							return false
 						}
 					}
 					Info.Println("[+] Use SimHash Similar")
 					SimilarBody = r[1].Body
 				}
-				// } else {
-				// 	Debug.Println("？？？？")
-				// 	Debug.Println("Status :", r[1].Status, r[2].Status, r[3].Status)
-				// 	Debug.Println("Length :", r[1].Length, r[2].Length, r[3].Length)
 			}
 		}
 	}

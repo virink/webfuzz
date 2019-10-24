@@ -15,7 +15,7 @@ const (
 	// APPNAME Name for app
 	APPNAME = "WebFuzz"
 	// VERSION Version for app
-	VERSION = "0.0.2"
+	VERSION = "0.0.3"
 
 	HEAD int = 1
 	GET  int = 2
